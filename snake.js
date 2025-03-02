@@ -9,7 +9,7 @@ let snake = [];
 let food = {};
 let score = 0;
 let highScore = 0; // Add high score tracking
-let speed = 7;
+let speed = 5; // Reduced initial speed from 7 to 5
 let gameRunning = true;
 
 // Movement direction
@@ -50,6 +50,8 @@ function initGame() {
     
     // Start game
     gameRunning = true;
+    // Reset speed to initial value when restarting
+    speed = 5;
     main();
 }
 
@@ -123,9 +125,10 @@ function moveSnake() {
         // Generate new food
         generateFood();
         
-        // Increase speed slightly
-        if (speed < 15) {
-            speed += 0.1;
+        // Increase speed slightly, but more gradually than before
+        // Only increase speed every 30 points (3 foods)
+        if (speed < 12 && score % 30 === 0) {
+            speed += 0.5;
         }
     } else {
         // Remove tail segment if food wasn't eaten

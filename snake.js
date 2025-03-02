@@ -37,7 +37,7 @@ const restartBtn = document.getElementById('restart-btn');
 
 // Initialize game
 function initGame() {
-    // Reset snakes
+    // Reset snakes with initial positions
     playerSnake = [
         { x: Math.floor(tileCount / 4) * gridSize, y: Math.floor(tileCount / 2) * gridSize }
     ];
@@ -46,14 +46,14 @@ function initGame() {
         { x: Math.floor(3 * tileCount / 4) * gridSize, y: Math.floor(tileCount / 2) * gridSize }
     ];
     
-    // Initial directions
-    playerDx = 0;
+    // Set initial directions - giving them starting directions so they move immediately
+    playerDx = gridSize;  // Start moving right
     playerDy = 0;
-    playerLastDirection = '';
+    playerLastDirection = 'RIGHT';
     
-    aiDx = 0;
+    aiDx = -gridSize;  // Start moving left
     aiDy = 0;
-    aiLastDirection = '';
+    aiLastDirection = 'LEFT';
     
     // Generate food
     generateFood();
@@ -72,6 +72,14 @@ function initGame() {
     // Start game
     gameRunning = true;
     speed = 5;
+    
+    // Force an initial draw to make sure elements are visible
+    clearCanvas();
+    drawFood();
+    drawSnake(playerSnake, '#00FF00', '#00CC00');
+    drawSnake(aiSnake, '#FFFF00', '#CCCC00');
+    
+    // Start the game loop
     main();
 }
 
@@ -185,10 +193,8 @@ function updateAiDirection() {
         aiDx = chosenMove.dx;
         aiDy = chosenMove.dy;
         aiLastDirection = chosenMove.direction;
-    } else {
-        // If no valid moves, continue in same direction (and probably die)
-        // This makes the AI feel more natural, occasionally making mistakes
     }
+    // If no valid moves, continue in same direction
 }
 
 // Draw functions
@@ -198,6 +204,8 @@ function clearCanvas() {
 }
 
 function drawSnake(snake, headColor, bodyColor) {
+    if (!snake || snake.length === 0) return; // Skip if snake doesn't exist
+    
     snake.forEach((segment, index) => {
         // Different color for head
         ctx.fillStyle = (index === 0) ? headColor : bodyColor;
@@ -210,13 +218,17 @@ function drawSnake(snake, headColor, bodyColor) {
 }
 
 function drawFood() {
+    if (!food || food.x === undefined || food.y === undefined) {
+        generateFood(); // If food is not properly defined, generate it
+    }
+    
     ctx.fillStyle = '#FF0000';
     ctx.fillRect(food.x, food.y, gridSize, gridSize);
 }
 
 // Game logic
 function moveSnake(snake, dx, dy) {
-    if (snake.length === 0) return; // Snake is dead
+    if (!snake || snake.length === 0) return; // Snake is dead or not initialized
     
     // Don't move if no direction is set
     if (dx === 0 && dy === 0) return;
@@ -271,6 +283,10 @@ function moveSnake(snake, dx, dy) {
 }
 
 function generateFood() {
+    // Ensure the snakes exist
+    if (!playerSnake) playerSnake = [];
+    if (!aiSnake) aiSnake = [];
+    
     // Generate random position for food
     let newFood;
     let foodOnSnake;
@@ -458,5 +474,9 @@ document.addEventListener('keydown', function(event) {
 
 restartBtn.addEventListener('click', initGame);
 
-// Start the game
-window.onload = initGame; 
+// Start the game with the window load event
+window.onload = function() {
+    console.log("Game initializing...");
+    // Force any pending DOM updates to complete
+    setTimeout(initGame, 100);
+}; 

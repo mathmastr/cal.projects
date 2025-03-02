@@ -182,7 +182,7 @@ function main() {
             moveSnake(aiSnake, aiDx, aiDy);
         }
         
-        // Apply magnet effect if active
+        // Apply magnet effect if active for player
         if (powerUpActive && activePowerUpType === 'magnet') {
             applyMagnetEffect();
         }
@@ -371,7 +371,7 @@ function checkPowerUpCollision() {
             powerUp = null;
             
             // Player collected the power-up - activate with the saved type
-            activatePowerUp(collectedPowerUp.type.type);
+            activatePowerUp(collectedPowerUp.type.type, 'player');
             
             // Create screen flash effect
             screenFlashOpacity = 0.7;
@@ -385,11 +385,20 @@ function checkPowerUpCollision() {
     if (aiSnake.length > 0 && !aiIsFrozen) {
         const aiHead = aiSnake[0];
         if (aiHead.x === powerUp.x && aiHead.y === powerUp.y) {
-            // AI collects power-up
-            console.log("AI collected power-up");
+            // Get the power-up type
+            const powerUpType = powerUp.type.type;
+            console.log("AI collected power-up of type:", powerUpType);
+            
+            // Save reference and clear powerUp object
+            const collectedPowerUp = powerUp;
+            powerUp = null;
+            
+            // AI collects and activates the power-up
             aiScore += 5;
             updateScores();
-            powerUp = null;
+            
+            // Activate the power-up effect for AI
+            activatePowerUp(collectedPowerUp.type.type, 'ai');
             
             // Generate a new power-up after a delay
             setTimeout(generatePowerUp, 1000);
@@ -398,40 +407,137 @@ function checkPowerUpCollision() {
 }
 
 // Activate power-up effect
-function activatePowerUp(type) {
-    console.log("Power-up activated:", type); // Debug log
+function activatePowerUp(type, collector) {
+    console.log(`Power-up activated: ${type} by ${collector}`); // Debug log
     
-    // Set active power-up state
-    powerUpActive = true;
-    activePowerUpType = type;
-    powerUpTimeLeft = POWER_UP_DURATION;
+    // Check for valid collector
+    if (collector !== 'player' && collector !== 'ai') {
+        console.error("Invalid power-up collector:", collector);
+        return;
+    }
     
-    // Update the indicator
-    powerUpIndicatorElement.style.display = 'block';
+    // Set active power-up state - only for player
+    if (collector === 'player') {
+        powerUpActive = true;
+        activePowerUpType = type;
+        powerUpTimeLeft = POWER_UP_DURATION;
+        
+        // Update the indicator
+        powerUpIndicatorElement.style.display = 'block';
+    }
     
     switch (type) {
         case 'speed':
-            // Set the flag for speed boost
-            isSpeedBoosted = true;
-            console.log("Speed boost activated - player will move twice as fast");
-            break;
-        case 'freeze':
-            // Freeze AI snake
-            aiIsFrozen = true;
-            aiFreezeTimeLeft = POWER_UP_DURATION;
-            console.log("AI freeze activated - AI snake frozen for 5 seconds");
-            break;
-        case 'magnet':
-            // Magnet effect is applied in applyMagnetEffect
-            console.log("Magnet activated - food will be pulled toward player");
-            break;
-        case 'shrink':
-            // Shrink player snake
-            if (playerSnake.length > 3) {
-                playerSnake = playerSnake.slice(0, Math.max(3, Math.floor(playerSnake.length / 2)));
+            if (collector === 'player') {
+                // Set the flag for speed boost
+                isSpeedBoosted = true;
+                console.log("Player speed boost activated - player will move twice as fast");
+            } else {
+                // For AI, increase their speed by making them move every frame
+                console.log("AI speed boost activated");
+                // Effect handled in main loop
             }
-            console.log("Shrink activated - player snake length reduced");
             break;
+            
+        case 'freeze':
+            if (collector === 'player') {
+                // Freeze AI snake
+                aiIsFrozen = true;
+                aiFreezeTimeLeft = POWER_UP_DURATION;
+                console.log("AI snake frozen for 5 seconds");
+            } else {
+                // AI freezes player (reduce player speed dramatically)
+                isSpeedBoosted = false;
+                playerMoveCounter = -5; // Add a delay before player can move
+                console.log("Player slowed down by AI freeze power-up");
+                
+                // Create a screen effect to show the player is slowed
+                screenFlashOpacity = 0.3;
+                
+                // Show indicator for player
+                powerUpIndicatorElement.textContent = `Slowed by AI! (5s)`;
+                powerUpIndicatorElement.style.display = 'block';
+                
+                // Reset after duration
+                setTimeout(() => {
+                    playerMoveCounter = 0;
+                    powerUpIndicatorElement.style.display = 'none';
+                }, POWER_UP_DURATION);
+            }
+            break;
+            
+        case 'magnet':
+            if (collector === 'player') {
+                // Magnet effect is applied in applyMagnetEffect
+                console.log("Player magnet activated - food will be pulled toward player");
+            } else {
+                // For AI, move food closer to them
+                if (food && aiSnake.length > 0) {
+                    const aiHead = aiSnake[0];
+                    // Move food closer to AI but not directly on it
+                    const newX = Math.round((food.x + aiHead.x) / (2 * gridSize)) * gridSize;
+                    const newY = Math.round((food.y + aiHead.y) / (2 * gridSize)) * gridSize;
+                    
+                    // Don't place on top of snakes
+                    let validPosition = true;
+                    
+                    // Check collision with any snake segments
+                    for (let segment of playerSnake.concat(aiSnake)) {
+                        if (segment.x === newX && segment.y === newY) {
+                            validPosition = false;
+                            break;
+                        }
+                    }
+                    
+                    if (validPosition) {
+                        food.x = newX;
+                        food.y = newY;
+                        console.log("AI magnet relocated food");
+                    }
+                }
+            }
+            break;
+            
+        case 'shrink':
+            if (collector === 'player') {
+                // Safely shrink player snake
+                try {
+                    if (playerSnake.length > 3) {
+                        const newLength = Math.max(3, Math.floor(playerSnake.length / 2));
+                        playerSnake = playerSnake.slice(0, newLength);
+                        console.log("Player snake length reduced to", playerSnake.length);
+                    } else {
+                        console.log("Player snake too short to shrink further");
+                    }
+                } catch (error) {
+                    console.error("Error in shrink power-up:", error);
+                }
+            } else {
+                // AI using shrink power-up against player
+                try {
+                    if (playerSnake.length > 5) {
+                        const newLength = Math.max(5, playerSnake.length - 3);
+                        playerSnake = playerSnake.slice(0, newLength);
+                        console.log("Player snake reduced by AI shrink to", playerSnake.length);
+                        
+                        // Show effect
+                        screenFlashOpacity = 0.5;
+                        
+                        // Show indicator for player
+                        powerUpIndicatorElement.textContent = `Shrunk by AI!`;
+                        powerUpIndicatorElement.style.display = 'block';
+                        
+                        // Hide indicator after 2 seconds
+                        setTimeout(() => {
+                            powerUpIndicatorElement.style.display = 'none';
+                        }, 2000);
+                    }
+                } catch (error) {
+                    console.error("Error in AI shrink power-up:", error);
+                }
+            }
+            break;
+            
         default:
             console.warn("Unknown power-up type:", type);
             break;

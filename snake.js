@@ -18,7 +18,8 @@ let winner = null;
 
 // Player-specific variables for speed control
 let playerMoveCounter = 0;
-let playerMoveThreshold = 1; // Set to 0.5 for speed boost to move twice as fast
+let playerMoveThreshold = 1; // Normal movement rate
+let isSpeedBoosted = false; // Separate flag to track speed boost status
 
 // Power-up related variables
 let powerUpActive = false;
@@ -92,6 +93,9 @@ function initGame() {
     screenFlashOpacity = 0;
     powerUpIndicatorElement.style.display = 'none';
     
+    // Reset speed boost
+    isSpeedBoosted = false;
+    
     // Reset player move counter and threshold
     playerMoveCounter = 0;
     playerMoveThreshold = 1;
@@ -164,15 +168,11 @@ function main() {
         // Handle player movement with speed boost
         playerMoveCounter++;
         
-        // Determine move threshold based on speed boost
-        if (powerUpActive && activePowerUpType === 'speed') {
-            playerMoveThreshold = 0.5; // Move twice as fast with speed boost
-        } else {
-            playerMoveThreshold = 1; // Normal speed
-        }
+        // Fixed implementation of speed boost
+        const moveThreshold = isSpeedBoosted ? 0.5 : 1;
         
         // Move player when counter exceeds threshold
-        if (playerMoveCounter >= playerMoveThreshold) {
+        if (playerMoveCounter >= moveThreshold) {
             moveSnake(playerSnake, playerDx, playerDy);
             playerMoveCounter = 0; // Reset counter
         }
@@ -228,25 +228,38 @@ function drawMagnetEffect() {
     if (!food || playerSnake.length === 0) return;
     
     const head = playerSnake[0];
-    const foodX = food.x + gridSize/2;
-    const foodY = food.y + gridSize/2;
     const headX = head.x + gridSize/2;
     const headY = head.y + gridSize/2;
+    const foodX = food.x + gridSize/2;
+    const foodY = food.y + gridSize/2;
     
-    // Draw line from food to snake head
-    ctx.beginPath();
-    ctx.moveTo(foodX, foodY);
-    ctx.lineTo(headX, headY);
-    ctx.strokeStyle = 'rgba(255, 105, 180, 0.5)'; // Semi-transparent pink
-    ctx.lineWidth = 3;
-    ctx.stroke();
+    // Calculate direct vector from food to head
+    const dx = headX - foodX;
+    const dy = headY - foodY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
     
-    // Draw pulsing circle around food
-    const pulseSize = 5 + Math.sin(Date.now() / 100) * 3;
-    ctx.beginPath();
-    ctx.arc(foodX, foodY, pulseSize, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 105, 180, 0.7)';
-    ctx.fill();
+    // Pull food toward player if within range
+    if (distance < 200) {
+        // Create vector for movement
+        let moveX = (dx / distance) * magnetPullStrength;
+        let moveY = (dy / distance) * magnetPullStrength;
+        
+        // Move food directly toward player
+        food.x += moveX;
+        food.y += moveY;
+        
+        // Snap food to grid to prevent visual glitches
+        food.x = Math.round(food.x / gridSize) * gridSize;
+        food.y = Math.round(food.y / gridSize) * gridSize;
+        
+        // Keep food within game boundaries
+        if (food.x < 0) food.x = 0;
+        if (food.x >= canvas.width) food.x = canvas.width - gridSize;
+        if (food.y < 0) food.y = 0;
+        if (food.y >= canvas.height) food.y = canvas.height - gridSize;
+        
+        console.log("Magnet pulling food", {dx, dy, distance, moveX, moveY});
+    }
 }
 
 // Update power-up effects and timers
@@ -260,7 +273,7 @@ function updatePowerUps() {
     }
     
     // Update active power-up timer
-    if (powerUpActive) {
+    if (powerUpActive && activePowerUpType) {
         powerUpTimeLeft -= 1000 / speed;
         
         // Update the power-up indicator with remaining time
@@ -280,6 +293,9 @@ function updatePowerUps() {
             case 'shrink':
                 powerUpName = '📏 Shrink';
                 break;
+            default:
+                powerUpName = 'Unknown';
+                break;
         }
         
         powerUpIndicatorElement.textContent = `Active: ${powerUpName} (${secondsLeft}s)`;
@@ -289,6 +305,12 @@ function updatePowerUps() {
             // Power-up has expired
             powerUpActive = false;
             activePowerUpType = null;
+            
+            // Reset speed boost flag when expired
+            if (activePowerUpType === 'speed') {
+                isSpeedBoosted = false;
+            }
+            
             powerUpIndicatorElement.style.display = 'none';
         }
     } else {
@@ -407,8 +429,12 @@ function checkPowerUpCollision() {
     if (playerSnake.length > 0) {
         const playerHead = playerSnake[0];
         if (playerHead.x === powerUp.x && playerHead.y === powerUp.y) {
+            // Get the power-up type from the powerUp object correctly
+            const powerUpType = powerUp.type.type;
+            console.log("Player collected power-up of type:", powerUpType);
+            
             // Player collected the power-up
-            activatePowerUp(powerUp.type.type);
+            activatePowerUp(powerUpType);
             powerUp = null;
             
             // Create screen flash effect
@@ -448,53 +474,30 @@ function activatePowerUp(type) {
     
     switch (type) {
         case 'speed':
-            // Speed boost is handled in the main loop with playerMoveThreshold
+            // Set the flag for speed boost
+            isSpeedBoosted = true;
+            console.log("Speed boost activated");
             break;
         case 'freeze':
             // Freeze AI snake
             aiIsFrozen = true;
             aiFreezeTimeLeft = POWER_UP_DURATION;
+            console.log("AI freeze activated");
             break;
         case 'magnet':
             // Magnet effect is applied in applyMagnetEffect
+            console.log("Magnet activated");
             break;
         case 'shrink':
             // Shrink player snake
             if (playerSnake.length > 3) {
                 playerSnake = playerSnake.slice(0, Math.max(3, Math.floor(playerSnake.length / 2)));
             }
+            console.log("Shrink activated");
             break;
-    }
-}
-
-// Apply magnet effect to pull food toward player
-function applyMagnetEffect() {
-    if (!food || playerSnake.length === 0) return;
-    
-    const head = playerSnake[0];
-    const dx = head.x - food.x;
-    const dy = head.y - food.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    // Pull food toward player if within range (increased to 200)
-    if (distance < 200) {
-        // Determine direction to pull
-        const dirX = dx > 0 ? 1 : -1;
-        const dirY = dy > 0 ? 1 : -1;
-        
-        // Move food directly toward player at faster rate
-        food.x += dirX * magnetPullStrength;
-        food.y += dirY * magnetPullStrength;
-        
-        // Snap to grid to avoid visual issues
-        food.x = Math.round(food.x / gridSize) * gridSize;
-        food.y = Math.round(food.y / gridSize) * gridSize;
-        
-        // Keep food within bounds
-        if (food.x < 0) food.x = 0;
-        if (food.x >= canvas.width) food.x = canvas.width - gridSize;
-        if (food.y < 0) food.y = 0;
-        if (food.y >= canvas.height) food.y = canvas.height - gridSize;
+        default:
+            console.warn("Unknown power-up type:", type);
+            break;
     }
 }
 

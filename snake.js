@@ -25,6 +25,7 @@ let powerUpOpacity = 1;
 let powerUpFadeDirection = -0.05;
 let screenFlashOpacity = 0;
 let magnetPullStrength = 3;
+let powerUpSpawnInterval = null; // Store the interval ID
 
 // Movement directions
 let playerDx = 0;
@@ -87,6 +88,11 @@ function initGame() {
     screenFlashOpacity = 0;
     powerUpIndicatorElement.style.display = 'none';
     
+    // Clear any existing power-up interval
+    if (powerUpSpawnInterval) {
+        clearInterval(powerUpSpawnInterval);
+    }
+    
     // Generate food
     generateFood();
     
@@ -114,8 +120,16 @@ function initGame() {
     // Start the game loop
     main();
     
-    // Set a timer to generate the first power-up
-    setTimeout(generatePowerUp, getRandomTime(5000, 10000));
+    // Generate a power-up immediately
+    generatePowerUp();
+    
+    // Set up a regular interval for power-up generation
+    powerUpSpawnInterval = setInterval(() => {
+        // Only generate a new power-up if there isn't one already
+        if (!powerUp && gameRunning) {
+            generatePowerUp();
+        }
+    }, 3000); // Try to generate a power-up every 3 seconds
 }
 
 // Main game loop
@@ -140,7 +154,10 @@ function main() {
         }
         
         // Move player snake - apply speed boost if active
-        const currentPlayerSpeed = (powerUpActive && activePowerUpType === 'speed') ? speed * 1.5 : speed;
+        let currentSpeed = speed;
+        if (powerUpActive && activePowerUpType === 'speed') {
+            currentSpeed = speed * 1.5;
+        }
         moveSnake(playerSnake, playerDx, playerDy);
         
         // Move AI snake if not frozen
@@ -231,20 +248,14 @@ function updatePowerUps() {
     }
 }
 
-// Generate a random power-up
+// Generate a random power-up - simplified for reliability
 function generatePowerUp() {
-    if (!gameRunning) return;
-    
-    // Don't generate a new power-up if one already exists or if a power-up is active
-    if (powerUp !== null) {
-        // Schedule the next attempt
-        setTimeout(generatePowerUp, getRandomTime(3000, 5000));
-        return;
-    }
+    if (!gameRunning || powerUp !== null) return;
     
     // Generate random position for power-up
     let newPowerUp;
     let powerUpOnSnake;
+    let attempts = 0;
     
     do {
         powerUpOnSnake = false;
@@ -276,19 +287,20 @@ function generatePowerUp() {
         if (food.x === newPowerUp.x && food.y === newPowerUp.y) {
             powerUpOnSnake = true;
         }
+        
+        attempts++;
+        // If we've tried many times and can't find a spot, give up for now
+        if (attempts > 50) return;
     } while (powerUpOnSnake);
     
     powerUp = newPowerUp;
     
-    // Schedule the next power-up generation
-    // If this power-up isn't collected, it will disappear
+    // Make power-up disappear after 7 seconds if not collected
     setTimeout(() => {
         if (powerUp === newPowerUp) {
             powerUp = null;
         }
-        // Schedule the next power-up
-        setTimeout(generatePowerUp, getRandomTime(3000, 8000));
-    }, 10000); // Power-up disappears after 10 seconds
+    }, 7000);
 }
 
 // Draw the power-up with flashing effect
@@ -352,11 +364,16 @@ function checkPowerUpCollision() {
         
         // Create screen flash effect
         screenFlashOpacity = 0.7;
+        
+        // Generate a new power-up after a delay
+        setTimeout(generatePowerUp, 1000);
     }
 }
 
 // Activate power-up effect
 function activatePowerUp(type) {
+    console.log("Power-up activated:", type); // Debug log
+    
     powerUpActive = true;
     activePowerUpType = type;
     powerUpTimeLeft = POWER_UP_DURATION;
@@ -440,11 +457,6 @@ function drawFrozenEffect(snake) {
         ctx.arc(segment.x + gridSize/2, segment.y + 3*gridSize/4, 2, 0, Math.PI * 2);
         ctx.fill();
     });
-}
-
-// Helper function to get random time
-function getRandomTime(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 // AI snake logic
@@ -744,6 +756,12 @@ function aiDies() {
 
 function gameOver() {
     gameRunning = false;
+    
+    // Clear the power-up spawn interval
+    if (powerUpSpawnInterval) {
+        clearInterval(powerUpSpawnInterval);
+        powerUpSpawnInterval = null;
+    }
     
     // Update final scores display in game over screen
     finalPlayerScoreElement.textContent = playerScore;

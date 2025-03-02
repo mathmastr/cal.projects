@@ -8,6 +8,7 @@ const tileCount = canvas.width / gridSize;
 let snake = [];
 let food = {};
 let score = 0;
+let highScore = 0; // Add high score tracking
 let speed = 7;
 let gameRunning = true;
 
@@ -18,8 +19,10 @@ let lastDirection = '';
 
 // DOM elements
 const scoreElement = document.getElementById('score');
+const highScoreElement = document.getElementById('high-score');
 const gameOverElement = document.getElementById('game-over');
 const finalScoreElement = document.getElementById('final-score');
+const finalHighScoreElement = document.getElementById('final-high-score');
 const restartBtn = document.getElementById('restart-btn');
 
 // Initialize game
@@ -37,9 +40,10 @@ function initGame() {
     // Generate food
     generateFood();
     
-    // Reset score
+    // Reset score (but keep high score)
     score = 0;
     updateScore();
+    updateHighScore();
     
     // Hide game over message
     gameOverElement.style.display = 'none';
@@ -110,6 +114,12 @@ function moveSnake() {
         score += 10;
         updateScore();
         
+        // Check and update high score if needed
+        if (score > highScore) {
+            highScore = score;
+            updateHighScore();
+        }
+        
         // Generate new food
         generateFood();
         
@@ -167,12 +177,21 @@ function checkCollision() {
 
 function gameOver() {
     gameRunning = false;
+    
+    // Update final score and high score display in game over screen
     finalScoreElement.textContent = score;
+    finalHighScoreElement.textContent = highScore;
+    
+    // Show game over element
     gameOverElement.style.display = 'block';
 }
 
 function updateScore() {
     scoreElement.textContent = `Score: ${score}`;
+}
+
+function updateHighScore() {
+    highScoreElement.textContent = `High Score: ${highScore}`;
 }
 
 // Event listeners

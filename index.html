@@ -29,6 +29,13 @@
             left: 10px;
             font-size: 20px;
         }
+        #high-score {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 20px;
+            color: #FFD700; /* Gold color for high score */
+        }
         #game-over {
             position: absolute;
             top: 50%;
@@ -62,9 +69,11 @@
     <div id="game-container">
         <canvas id="game-canvas" width="400" height="400"></canvas>
         <div id="score">Score: 0</div>
+        <div id="high-score">High Score: 0</div>
         <div id="game-over">
             Game Over!
             <div>Final Score: <span id="final-score">0</span></div>
+            <div>High Score: <span id="final-high-score">0</span></div>
             <button id="restart-btn">Play Again</button>
         </div>
     </div>

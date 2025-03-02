@@ -107,6 +107,19 @@ function moveSnake() {
     // Create new head
     const head = { x: snake[0].x + dx, y: snake[0].y + dy };
     
+    // Wrap around when hitting walls
+    if (head.x < 0) {
+        head.x = canvas.width - gridSize;
+    } else if (head.x >= canvas.width) {
+        head.x = 0;
+    }
+    
+    if (head.y < 0) {
+        head.y = canvas.height - gridSize;
+    } else if (head.y >= canvas.height) {
+        head.y = 0;
+    }
+    
     // Add new head to beginning of snake array
     snake.unshift(head);
     
@@ -163,13 +176,7 @@ function generateFood() {
 function checkCollision() {
     const head = snake[0];
     
-    // Check wall collision
-    if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height) {
-        gameOver();
-        return;
-    }
-    
-    // Check self collision (start from index 1 to avoid checking head against itself)
+    // Check self collision only (wall collision is handled in moveSnake)
     for (let i = 1; i < snake.length; i++) {
         if (head.x === snake[i].x && head.y === snake[i].y) {
             gameOver();

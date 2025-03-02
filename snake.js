@@ -24,7 +24,7 @@ const POWER_UP_DURATION = 5000; // 5 seconds
 let powerUpOpacity = 1;
 let powerUpFadeDirection = -0.05;
 let screenFlashOpacity = 0;
-let magnetPullStrength = 3;
+let magnetPullStrength = 5; // Increased from 3 to 5 for more noticeable effect
 let powerUpSpawnInterval = null; // Store the interval ID
 
 // Movement directions
@@ -136,6 +136,12 @@ function initGame() {
 function main() {
     if (!gameRunning) return;
     
+    // Calculate current speed based on power-up
+    let currentSpeed = speed;
+    if (powerUpActive && activePowerUpType === 'speed') {
+        currentSpeed = speed * 2; // Double speed instead of 1.5x for more noticeable effect
+    }
+    
     setTimeout(function() {
         clearCanvas();
         
@@ -147,17 +153,13 @@ function main() {
             updateAiDirection();
         } else {
             // Update freeze timer
-            aiFreezeTimeLeft -= 1000 / speed;
+            aiFreezeTimeLeft -= 1000 / currentSpeed;
             if (aiFreezeTimeLeft <= 0) {
                 aiIsFrozen = false;
             }
         }
         
-        // Move player snake - apply speed boost if active
-        let currentSpeed = speed;
-        if (powerUpActive && activePowerUpType === 'speed') {
-            currentSpeed = speed * 1.5;
-        }
+        // Move player snake with current speed
         moveSnake(playerSnake, playerDx, playerDy);
         
         // Move AI snake if not frozen
@@ -198,7 +200,7 @@ function main() {
             // Call main again
             requestAnimationFrame(main);
         }
-    }, 1000 / speed);
+    }, 1000 / currentSpeed); // Use currentSpeed instead of speed for speed boost effect
 }
 
 // Update power-up effects and timers
@@ -353,20 +355,36 @@ function drawPowerUp() {
 
 // Check if player has collected a power-up
 function checkPowerUpCollision() {
-    if (!powerUp || !playerSnake.length) return;
+    if (!powerUp) return;
     
-    const head = playerSnake[0];
+    // Check if player collected power-up
+    if (playerSnake.length > 0) {
+        const playerHead = playerSnake[0];
+        if (playerHead.x === powerUp.x && playerHead.y === powerUp.y) {
+            // Player collected the power-up
+            activatePowerUp(powerUp.type.type);
+            powerUp = null;
+            
+            // Create screen flash effect
+            screenFlashOpacity = 0.7;
+            
+            // Generate a new power-up after a delay
+            setTimeout(generatePowerUp, 1000);
+        }
+    }
     
-    if (head.x === powerUp.x && head.y === powerUp.y) {
-        // Player collected the power-up
-        activatePowerUp(powerUp.type.type);
-        powerUp = null;
-        
-        // Create screen flash effect
-        screenFlashOpacity = 0.7;
-        
-        // Generate a new power-up after a delay
-        setTimeout(generatePowerUp, 1000);
+    // Check if AI collected power-up
+    if (aiSnake.length > 0 && !aiIsFrozen) {
+        const aiHead = aiSnake[0];
+        if (aiHead.x === powerUp.x && aiHead.y === powerUp.y) {
+            // AI doesn't use power-ups, but collecting them gives 5 points
+            aiScore += 5;
+            updateScores();
+            powerUp = null;
+            
+            // Generate a new power-up after a delay
+            setTimeout(generatePowerUp, 1000);
+        }
     }
 }
 
@@ -411,28 +429,27 @@ function applyMagnetEffect() {
     const dy = head.y - food.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     
-    // Only pull if food is within range
-    if (distance < 100) {
+    // Only pull if food is within range - increased range from 100 to 150
+    if (distance < 150) {
         // Calculate new food position
         let newX = food.x;
         let newY = food.y;
         
-        if (Math.abs(dx) > gridSize || Math.abs(dy) > gridSize) {
-            if (dx > 0) newX += magnetPullStrength;
-            else if (dx < 0) newX -= magnetPullStrength;
-            
-            if (dy > 0) newY += magnetPullStrength;
-            else if (dy < 0) newY -= magnetPullStrength;
-            
-            // Ensure food stays on grid
-            newX = Math.round(newX / gridSize) * gridSize;
-            newY = Math.round(newY / gridSize) * gridSize;
-            
-            // Update food position if valid
-            if (newX >= 0 && newX < canvas.width && newY >= 0 && newY < canvas.height) {
-                food.x = newX;
-                food.y = newY;
-            }
+        // Simplified magnet logic for more reliable pulling
+        if (dx > 0) newX += magnetPullStrength;
+        else if (dx < 0) newX -= magnetPullStrength;
+        
+        if (dy > 0) newY += magnetPullStrength;
+        else if (dy < 0) newY -= magnetPullStrength;
+        
+        // Ensure food stays on grid
+        newX = Math.round(newX / gridSize) * gridSize;
+        newY = Math.round(newY / gridSize) * gridSize;
+        
+        // Update food position if valid
+        if (newX >= 0 && newX < canvas.width && newY >= 0 && newY < canvas.height) {
+            food.x = newX;
+            food.y = newY;
         }
     }
 }
@@ -459,7 +476,7 @@ function drawFrozenEffect(snake) {
     });
 }
 
-// AI snake logic
+// AI snake logic - Updated to consider power-ups
 function updateAiDirection() {
     if (aiSnake.length === 0) return; // AI is dead
     
@@ -467,7 +484,7 @@ function updateAiDirection() {
     const foodX = food.x;
     const foodY = food.y;
     
-    // Simple AI: try to move toward food, avoiding collisions
+    // Simple AI: try to move toward food or power-up, avoiding collisions
     let possibleMoves = [];
     
     // Check all four directions
@@ -516,20 +533,34 @@ function updateAiDirection() {
             
             if (!willCollide) {
                 // Calculate distance to food
-                const distance = Math.abs(newX - foodX) + Math.abs(newY - foodY);
+                const foodDistance = Math.abs(newX - foodX) + Math.abs(newY - foodY);
+                
+                // Calculate distance to power-up if it exists
+                let powerUpDistance = Infinity;
+                if (powerUp) {
+                    powerUpDistance = Math.abs(newX - powerUp.x) + Math.abs(newY - powerUp.y);
+                }
+                
+                // Determine the target (food or power-up) based on which is closer
+                // Also randomly decide with 50% chance to go for power-up if one exists
+                const goForPowerUp = powerUp && (powerUpDistance < foodDistance || Math.random() < 0.5);
+                
+                const targetDistance = goForPowerUp ? powerUpDistance : foodDistance;
+                
                 possibleMoves.push({
                     dx: dir.dx,
                     dy: dir.dy,
                     direction: dir.name,
-                    distance: distance
+                    distance: targetDistance,
+                    isTowardPowerUp: goForPowerUp
                 });
             }
         }
     });
     
-    // If there are possible moves, choose the one closest to food
+    // If there are possible moves, choose the one closest to target
     if (possibleMoves.length > 0) {
-        // Sort by distance to food (ascending)
+        // Sort by distance (ascending)
         possibleMoves.sort((a, b) => a.distance - b.distance);
         
         // Add some randomness to make AI less predictable (20% chance to not choose optimal move)

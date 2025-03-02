@@ -44,6 +44,17 @@
             font-size: 20px;
             color: #FFD700; /* Gold color for high score */
         }
+        #power-up-indicator {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            font-size: 16px;
+            color: #9370DB; /* Purple for power-ups */
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            display: none;
+        }
         #game-over {
             position: absolute;
             top: 50%;
@@ -83,6 +94,7 @@
         <div id="player-score">You: 0</div>
         <div id="ai-score">AI: 0</div>
         <div id="high-score">High Score: 0</div>
+        <div id="power-up-indicator">Active: None</div>
         <div id="game-over">
             <div class="winner" id="winner-text">Game Over!</div>
             <div>Your Score: <span id="final-player-score">0</span></div>
@@ -94,7 +106,13 @@
     <div id="instructions">
         <p>Use arrow keys to control your snake (green)</p>
         <p>Compete with the AI snake (yellow) for food</p>
-        <p>Game over if you collide with yourself or the AI</p>
+        <p>Collect power-ups (purple) for special abilities:</p>
+        <ul>
+            <li><strong>⚡ Speed Boost</strong> - Move faster temporarily</li>
+            <li><strong>❄ Snake Freeze</strong> - Freeze the AI snake</li>
+            <li><strong>🧲 Magnet</strong> - Pull food toward your snake</li>
+            <li><strong>📏 Shrink</strong> - Reduce your snake's length</li>
+        </ul>
     </div>
     <script src="snake.js"></script>
 </body>

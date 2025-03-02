@@ -8,12 +8,23 @@ const tileCount = canvas.width / gridSize;
 let playerSnake = [];
 let aiSnake = [];
 let food = {};
+let powerUp = null;
 let playerScore = 0;
 let aiScore = 0;
 let highScore = 0;
 let speed = 5;
 let gameRunning = true;
 let winner = null;
+
+// Power-up related variables
+let powerUpActive = false;
+let activePowerUpType = null;
+let powerUpTimeLeft = 0;
+const POWER_UP_DURATION = 5000; // 5 seconds
+let powerUpOpacity = 1;
+let powerUpFadeDirection = -0.05;
+let screenFlashOpacity = 0;
+let magnetPullStrength = 3;
 
 // Movement directions
 let playerDx = 0;
@@ -23,17 +34,28 @@ let playerLastDirection = '';
 let aiDx = 0;
 let aiDy = 0;
 let aiLastDirection = '';
+let aiIsFrozen = false;
+let aiFreezeTimeLeft = 0;
 
 // DOM elements
 const playerScoreElement = document.getElementById('player-score');
 const aiScoreElement = document.getElementById('ai-score');
 const highScoreElement = document.getElementById('high-score');
+const powerUpIndicatorElement = document.getElementById('power-up-indicator');
 const gameOverElement = document.getElementById('game-over');
 const winnerTextElement = document.getElementById('winner-text');
 const finalPlayerScoreElement = document.getElementById('final-player-score');
 const finalAiScoreElement = document.getElementById('final-ai-score');
 const finalHighScoreElement = document.getElementById('final-high-score');
 const restartBtn = document.getElementById('restart-btn');
+
+// Power-up types
+const powerUpTypes = [
+    { type: 'speed', color: '#8A2BE2', effect: 'Speed Boost' },
+    { type: 'freeze', color: '#00BFFF', effect: 'Snake Freeze' },
+    { type: 'magnet', color: '#FF69B4', effect: 'Food Magnet' },
+    { type: 'shrink', color: '#32CD32', effect: 'Shrink' }
+];
 
 // Initialize game
 function initGame() {
@@ -54,6 +76,16 @@ function initGame() {
     aiDx = -gridSize;  // Start moving left
     aiDy = 0;
     aiLastDirection = 'LEFT';
+    
+    // Reset power-up states
+    powerUp = null;
+    powerUpActive = false;
+    activePowerUpType = null;
+    powerUpTimeLeft = 0;
+    aiIsFrozen = false;
+    aiFreezeTimeLeft = 0;
+    screenFlashOpacity = 0;
+    powerUpIndicatorElement.style.display = 'none';
     
     // Generate food
     generateFood();
@@ -81,6 +113,9 @@ function initGame() {
     
     // Start the game loop
     main();
+    
+    // Set a timer to generate the first power-up
+    setTimeout(generatePowerUp, getRandomTime(5000, 10000));
 }
 
 // Main game loop
@@ -90,26 +125,326 @@ function main() {
     setTimeout(function() {
         clearCanvas();
         
-        // Update AI direction
-        updateAiDirection();
+        // Update power-up effects and timers
+        updatePowerUps();
         
-        // Move both snakes
+        // Update AI direction if not frozen
+        if (!aiIsFrozen) {
+            updateAiDirection();
+        } else {
+            // Update freeze timer
+            aiFreezeTimeLeft -= 1000 / speed;
+            if (aiFreezeTimeLeft <= 0) {
+                aiIsFrozen = false;
+            }
+        }
+        
+        // Move player snake - apply speed boost if active
+        const currentPlayerSpeed = (powerUpActive && activePowerUpType === 'speed') ? speed * 1.5 : speed;
         moveSnake(playerSnake, playerDx, playerDy);
-        moveSnake(aiSnake, aiDx, aiDy);
+        
+        // Move AI snake if not frozen
+        if (!aiIsFrozen) {
+            moveSnake(aiSnake, aiDx, aiDy);
+        }
+        
+        // Apply magnet effect if active
+        if (powerUpActive && activePowerUpType === 'magnet') {
+            applyMagnetEffect();
+        }
         
         // Check for collisions
         checkCollisions();
         
+        // Check for power-up collision
+        checkPowerUpCollision();
+        
         // If game is still running, continue
         if (gameRunning) {
             drawFood();
+            if (powerUp) drawPowerUp();
             drawSnake(playerSnake, '#00FF00', '#00CC00');  // Green for player
             drawSnake(aiSnake, '#FFFF00', '#CCCC00');      // Yellow for AI
+            
+            // Draw screen flash effect if active
+            if (screenFlashOpacity > 0) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${screenFlashOpacity})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                screenFlashOpacity -= 0.05;
+            }
+            
+            // Draw frozen effect on AI if frozen
+            if (aiIsFrozen && aiSnake.length > 0) {
+                drawFrozenEffect(aiSnake);
+            }
             
             // Call main again
             requestAnimationFrame(main);
         }
     }, 1000 / speed);
+}
+
+// Update power-up effects and timers
+function updatePowerUps() {
+    // Update power-up flashing effect
+    if (powerUp) {
+        powerUpOpacity += powerUpFadeDirection;
+        if (powerUpOpacity <= 0.3 || powerUpOpacity >= 1) {
+            powerUpFadeDirection *= -1;
+        }
+    }
+    
+    // Update active power-up timer
+    if (powerUpActive) {
+        powerUpTimeLeft -= 1000 / speed;
+        
+        // Update the power-up indicator with remaining time
+        const secondsLeft = Math.max(0, Math.ceil(powerUpTimeLeft / 1000));
+        let powerUpName = '';
+        
+        switch (activePowerUpType) {
+            case 'speed':
+                powerUpName = '⚡ Speed Boost';
+                break;
+            case 'freeze':
+                powerUpName = '❄ Snake Freeze';
+                break;
+            case 'magnet':
+                powerUpName = '🧲 Magnet';
+                break;
+            case 'shrink':
+                powerUpName = '📏 Shrink';
+                break;
+        }
+        
+        powerUpIndicatorElement.textContent = `Active: ${powerUpName} (${secondsLeft}s)`;
+        powerUpIndicatorElement.style.display = 'block';
+        
+        if (powerUpTimeLeft <= 0) {
+            // Power-up has expired
+            powerUpActive = false;
+            activePowerUpType = null;
+            powerUpIndicatorElement.style.display = 'none';
+        }
+    } else {
+        powerUpIndicatorElement.style.display = 'none';
+    }
+}
+
+// Generate a random power-up
+function generatePowerUp() {
+    if (!gameRunning) return;
+    
+    // Don't generate a new power-up if one already exists or if a power-up is active
+    if (powerUp !== null) {
+        // Schedule the next attempt
+        setTimeout(generatePowerUp, getRandomTime(3000, 5000));
+        return;
+    }
+    
+    // Generate random position for power-up
+    let newPowerUp;
+    let powerUpOnSnake;
+    
+    do {
+        powerUpOnSnake = false;
+        newPowerUp = {
+            x: Math.floor(Math.random() * tileCount) * gridSize,
+            y: Math.floor(Math.random() * tileCount) * gridSize,
+            type: powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)]
+        };
+        
+        // Check if power-up is on player snake
+        for (let segment of playerSnake) {
+            if (segment.x === newPowerUp.x && segment.y === newPowerUp.y) {
+                powerUpOnSnake = true;
+                break;
+            }
+        }
+        
+        // Check if power-up is on AI snake
+        if (!powerUpOnSnake) {
+            for (let segment of aiSnake) {
+                if (segment.x === newPowerUp.x && segment.y === newPowerUp.y) {
+                    powerUpOnSnake = true;
+                    break;
+                }
+            }
+        }
+        
+        // Check if power-up is on food
+        if (food.x === newPowerUp.x && food.y === newPowerUp.y) {
+            powerUpOnSnake = true;
+        }
+    } while (powerUpOnSnake);
+    
+    powerUp = newPowerUp;
+    
+    // Schedule the next power-up generation
+    // If this power-up isn't collected, it will disappear
+    setTimeout(() => {
+        if (powerUp === newPowerUp) {
+            powerUp = null;
+        }
+        // Schedule the next power-up
+        setTimeout(generatePowerUp, getRandomTime(3000, 8000));
+    }, 10000); // Power-up disappears after 10 seconds
+}
+
+// Draw the power-up with flashing effect
+function drawPowerUp() {
+    if (!powerUp) return;
+    
+    // Create a gradient for the glow effect
+    const gradient = ctx.createRadialGradient(
+        powerUp.x + gridSize/2, powerUp.y + gridSize/2, 2,
+        powerUp.x + gridSize/2, powerUp.y + gridSize/2, gridSize
+    );
+    
+    gradient.addColorStop(0, powerUp.type.color);
+    gradient.addColorStop(1, 'rgba(138, 43, 226, 0)');
+    
+    // Draw the glow
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(powerUp.x + gridSize/2, powerUp.y + gridSize/2, gridSize, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Draw the power-up with current opacity
+    ctx.fillStyle = `rgba(138, 43, 226, ${powerUpOpacity})`;
+    ctx.fillRect(powerUp.x, powerUp.y, gridSize, gridSize);
+    
+    // Draw a symbol based on power-up type
+    ctx.fillStyle = 'white';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    let symbol = '?';
+    switch (powerUp.type.type) {
+        case 'speed':
+            symbol = '⚡';
+            break;
+        case 'freeze':
+            symbol = '❄';
+            break;
+        case 'magnet':
+            symbol = '🧲';
+            break;
+        case 'shrink':
+            symbol = '📏';
+            break;
+    }
+    
+    ctx.fillText(symbol, powerUp.x + gridSize/2, powerUp.y + gridSize/2);
+}
+
+// Check if player has collected a power-up
+function checkPowerUpCollision() {
+    if (!powerUp || !playerSnake.length) return;
+    
+    const head = playerSnake[0];
+    
+    if (head.x === powerUp.x && head.y === powerUp.y) {
+        // Player collected the power-up
+        activatePowerUp(powerUp.type.type);
+        powerUp = null;
+        
+        // Create screen flash effect
+        screenFlashOpacity = 0.7;
+    }
+}
+
+// Activate power-up effect
+function activatePowerUp(type) {
+    powerUpActive = true;
+    activePowerUpType = type;
+    powerUpTimeLeft = POWER_UP_DURATION;
+    
+    // Update the indicator
+    powerUpIndicatorElement.style.display = 'block';
+    
+    switch (type) {
+        case 'speed':
+            // Speed boost is handled in the main loop
+            break;
+        case 'freeze':
+            // Freeze AI snake
+            aiIsFrozen = true;
+            aiFreezeTimeLeft = POWER_UP_DURATION;
+            break;
+        case 'magnet':
+            // Magnet effect is applied in applyMagnetEffect
+            break;
+        case 'shrink':
+            // Shrink player snake
+            if (playerSnake.length > 3) {
+                playerSnake = playerSnake.slice(0, Math.max(3, Math.floor(playerSnake.length / 2)));
+            }
+            break;
+    }
+}
+
+// Apply magnet effect to pull food toward player
+function applyMagnetEffect() {
+    if (!food || playerSnake.length === 0) return;
+    
+    const head = playerSnake[0];
+    const dx = head.x - food.x;
+    const dy = head.y - food.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Only pull if food is within range
+    if (distance < 100) {
+        // Calculate new food position
+        let newX = food.x;
+        let newY = food.y;
+        
+        if (Math.abs(dx) > gridSize || Math.abs(dy) > gridSize) {
+            if (dx > 0) newX += magnetPullStrength;
+            else if (dx < 0) newX -= magnetPullStrength;
+            
+            if (dy > 0) newY += magnetPullStrength;
+            else if (dy < 0) newY -= magnetPullStrength;
+            
+            // Ensure food stays on grid
+            newX = Math.round(newX / gridSize) * gridSize;
+            newY = Math.round(newY / gridSize) * gridSize;
+            
+            // Update food position if valid
+            if (newX >= 0 && newX < canvas.width && newY >= 0 && newY < canvas.height) {
+                food.x = newX;
+                food.y = newY;
+            }
+        }
+    }
+}
+
+// Draw frozen effect on snake
+function drawFrozenEffect(snake) {
+    if (!snake.length) return;
+    
+    snake.forEach(segment => {
+        ctx.fillStyle = 'rgba(135, 206, 250, 0.5)';
+        ctx.fillRect(segment.x, segment.y, gridSize, gridSize);
+        
+        // Draw ice crystals
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.beginPath();
+        ctx.arc(segment.x + gridSize/4, segment.y + gridSize/4, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(segment.x + 3*gridSize/4, segment.y + gridSize/4, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(segment.x + gridSize/2, segment.y + 3*gridSize/4, 2, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+// Helper function to get random time
+function getRandomTime(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 // AI snake logic
@@ -314,6 +649,11 @@ function generateFood() {
                     break;
                 }
             }
+        }
+        
+        // Check if food is on power-up
+        if (!foodOnSnake && powerUp && newFood.x === powerUp.x && newFood.y === powerUp.y) {
+            foodOnSnake = true;
         }
     } while (foodOnSnake);
     

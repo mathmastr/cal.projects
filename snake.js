@@ -300,7 +300,7 @@ function applyMagnetEffect() {
     // Pull food toward player if within range
     if (distance < 200) {
         // Calculate normalized direction vector
-        const length = Math.sqrt(dx * dx + dy * dy);
+        const length = Math.max(0.1, Math.sqrt(dx * dx + dy * dy)); // Avoid division by zero
         const dirX = dx / length;
         const dirY = dy / length;
         
@@ -814,12 +814,140 @@ function updateScores() {
     highScoreElement.textContent = `High Score: ${highScore}`;
 }
 
+// Generate a random power-up - simplified for reliability
+function generatePowerUp() {
+    if (!gameRunning) return;
+    
+    // Reset powerUp if it already exists to avoid stale state
+    powerUp = null;
+    
+    // Generate random position for power-up
+    let newPowerUp;
+    let powerUpOnSnake;
+    let attempts = 0;
+    
+    do {
+        powerUpOnSnake = false;
+        newPowerUp = {
+            x: Math.floor(Math.random() * tileCount) * gridSize,
+            y: Math.floor(Math.random() * tileCount) * gridSize,
+            type: powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)]
+        };
+        
+        // Check if power-up is on player snake
+        for (let segment of playerSnake) {
+            if (segment.x === newPowerUp.x && segment.y === newPowerUp.y) {
+                powerUpOnSnake = true;
+                break;
+            }
+        }
+        
+        // Check if power-up is on AI snake
+        if (!powerUpOnSnake) {
+            for (let segment of aiSnake) {
+                if (segment.x === newPowerUp.x && segment.y === newPowerUp.y) {
+                    powerUpOnSnake = true;
+                    break;
+                }
+            }
+        }
+        
+        // Check if power-up is on food
+        if (food && food.x === newPowerUp.x && food.y === newPowerUp.y) {
+            powerUpOnSnake = true;
+        }
+        
+        attempts++;
+        // If we've tried many times and can't find a spot, give up for now
+        if (attempts > 50) {
+            console.log("Couldn't place power-up after 50 attempts");
+            return;
+        }
+    } while (powerUpOnSnake);
+    
+    console.log("Generated power-up:", newPowerUp.type.type, "at", newPowerUp.x, newPowerUp.y);
+    powerUp = newPowerUp;
+    
+    // Make power-up disappear after 7 seconds if not collected
+    setTimeout(() => {
+        if (powerUp === newPowerUp) {
+            console.log("Power-up expired");
+            powerUp = null;
+        }
+    }, 7000);
+}
+
+// Draw the power-up with flashing effect
+function drawPowerUp() {
+    if (!powerUp) return;
+    
+    // Create a gradient for the glow effect
+    const gradient = ctx.createRadialGradient(
+        powerUp.x + gridSize/2, powerUp.y + gridSize/2, 2,
+        powerUp.x + gridSize/2, powerUp.y + gridSize/2, gridSize
+    );
+    
+    gradient.addColorStop(0, powerUp.type.color);
+    gradient.addColorStop(1, 'rgba(138, 43, 226, 0)');
+    
+    // Draw the glow
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(powerUp.x + gridSize/2, powerUp.y + gridSize/2, gridSize, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Draw the power-up with current opacity
+    ctx.fillStyle = `rgba(138, 43, 226, ${powerUpOpacity})`;
+    ctx.fillRect(powerUp.x, powerUp.y, gridSize, gridSize);
+    
+    // Draw a symbol based on power-up type
+    ctx.fillStyle = 'white';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    let symbol = '?';
+    switch (powerUp.type.type) {
+        case 'speed':
+            symbol = '⚡';
+            break;
+        case 'freeze':
+            symbol = '❄';
+            break;
+        case 'magnet':
+            symbol = '🧲';
+            break;
+        case 'shrink':
+            symbol = '📏';
+            break;
+    }
+    
+    ctx.fillText(symbol, powerUp.x + gridSize/2, powerUp.y + gridSize/2);
+}
+
+// Draw frozen effect on AI snake
+function drawFrozenEffect(snake) {
+    if (!snake || snake.length === 0) return;
+    
+    // Draw a blue tint over the entire snake
+    snake.forEach(segment => {
+        ctx.fillStyle = 'rgba(0, 191, 255, 0.5)';
+        ctx.fillRect(segment.x, segment.y, gridSize, gridSize);
+    });
+}
+
 // Event listeners
 document.addEventListener('keydown', function(event) {
+    // Debug output to check if key events are being registered
+    console.log("Key pressed:", event.keyCode);
+    
     // Prevent arrow keys from scrolling the page
     if ([37, 38, 39, 40].indexOf(event.keyCode) > -1) {
         event.preventDefault();
     }
+    
+    // Only process key events if the game is running
+    if (!gameRunning) return;
     
     // Get new direction for player
     switch (event.keyCode) {
@@ -828,6 +956,7 @@ document.addEventListener('keydown', function(event) {
                 playerDx = -gridSize;
                 playerDy = 0;
                 playerLastDirection = 'LEFT';
+                console.log("Moving LEFT");
             }
             break;
         case 38: // Up arrow
@@ -835,6 +964,7 @@ document.addEventListener('keydown', function(event) {
                 playerDx = 0;
                 playerDy = -gridSize;
                 playerLastDirection = 'UP';
+                console.log("Moving UP");
             }
             break;
         case 39: // Right arrow
@@ -842,6 +972,7 @@ document.addEventListener('keydown', function(event) {
                 playerDx = gridSize;
                 playerDy = 0;
                 playerLastDirection = 'RIGHT';
+                console.log("Moving RIGHT");
             }
             break;
         case 40: // Down arrow
@@ -849,6 +980,7 @@ document.addEventListener('keydown', function(event) {
                 playerDx = 0;
                 playerDy = gridSize;
                 playerLastDirection = 'DOWN';
+                console.log("Moving DOWN");
             }
             break;
     }
@@ -859,6 +991,15 @@ restartBtn.addEventListener('click', initGame);
 // Start the game with the window load event
 window.onload = function() {
     console.log("Game initializing...");
+    
+    // Check that canvas and other important elements exist
+    if (!canvas) {
+        console.error("Canvas element not found!");
+    }
+    
     // Force any pending DOM updates to complete
-    setTimeout(initGame, 100);
+    setTimeout(function() {
+        initGame();
+        console.log("Game started!");
+    }, 100);
 }; 

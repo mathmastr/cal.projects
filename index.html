@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snake Game</title>
+    <title>Snake Game - Competitive Mode</title>
     <style>
         body {
             display: flex;
@@ -23,11 +23,19 @@
         #game-container {
             position: relative;
         }
-        #score {
+        #player-score {
             position: absolute;
             top: 10px;
             left: 10px;
             font-size: 20px;
+            color: #00FF00; /* Green for player */
+        }
+        #ai-score {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            font-size: 20px;
+            color: #FFFF00; /* Yellow for AI */
         }
         #high-score {
             position: absolute;
@@ -62,24 +70,31 @@
         #restart-btn:hover {
             background-color: #45a049;
         }
+        .winner {
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
-    <h1>Snake Game</h1>
+    <h1>Snake Game - Competitive Mode</h1>
     <div id="game-container">
         <canvas id="game-canvas" width="400" height="400"></canvas>
-        <div id="score">Score: 0</div>
+        <div id="player-score">You: 0</div>
+        <div id="ai-score">AI: 0</div>
         <div id="high-score">High Score: 0</div>
         <div id="game-over">
-            Game Over!
-            <div>Final Score: <span id="final-score">0</span></div>
+            <div class="winner" id="winner-text">Game Over!</div>
+            <div>Your Score: <span id="final-player-score">0</span></div>
+            <div>AI Score: <span id="final-ai-score">0</span></div>
             <div>High Score: <span id="final-high-score">0</span></div>
             <button id="restart-btn">Play Again</button>
         </div>
     </div>
     <div id="instructions">
-        <p>Use arrow keys to control the snake</p>
-        <p>Eat the food to grow and earn points</p>
+        <p>Use arrow keys to control your snake (green)</p>
+        <p>Compete with the AI snake (yellow) for food</p>
+        <p>Game over if you collide with yourself or the AI</p>
     </div>
     <script src="snake.js"></script>
 </body>

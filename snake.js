@@ -74,79 +74,34 @@ function initGame() {
     playerSnake = [
         { x: Math.floor(tileCount / 4) * gridSize, y: Math.floor(tileCount / 2) * gridSize }
     ];
-    
     aiSnake = [
         { x: Math.floor(tileCount * 3 / 4) * gridSize, y: Math.floor(tileCount / 2) * gridSize }
     ];
     
-    // Set initial directions - giving them starting directions so they move immediately
-    playerDx = gridSize;  // Start moving right
-    playerDy = 0;
-    playerLastDirection = 'RIGHT';
-    
-    aiDx = -gridSize;  // Start moving left
-    aiDy = 0;
-    aiLastDirection = 'LEFT';
-    
-    // Reset power-up states
-    powerUp = null;
-    powerUpActive = false;
-    activePowerUpType = null;
-    powerUpTimeLeft = 0;
-    aiIsFrozen = false;
-    aiFreezeTimeLeft = 0;
-    screenFlashOpacity = 0;
-    powerUpIndicatorElement.style.display = 'none';
-    
-    // Reset speed boost
-    isSpeedBoosted = false;
-    
-    // Reset player move counter and threshold
-    playerMoveCounter = 0;
-    playerMoveThreshold = 1;
-    
-    // Clear any existing power-up interval
-    if (powerUpSpawnInterval) {
-        clearInterval(powerUpSpawnInterval);
-    }
-    
-    // Generate food
-    generateFood();
-    
-    // Reset scores (but keep high score)
+    // Reset game state
     playerScore = 0;
     aiScore = 0;
     updateScores();
     
-    // Hide game over message
-    gameOverElement.style.display = 'none';
+    // Reset movement
+    playerDx = 0;
+    playerDy = 0;
+    playerLastDirection = '';
     
-    // Reset winner
-    winner = null;
+    aiDx = 0;
+    aiDy = 0;
+    aiLastDirection = '';
     
-    // Start game
-    gameRunning = true;
-    speed = 5;
+    // Reset AI frozen state
+    aiIsFrozen = false;
+    aiFreezeTimeLeft = 0;
     
-    // Force an initial draw to make sure elements are visible
-    clearCanvas();
-    drawFood();
-    drawSnake(playerSnake, '#00FF00', '#00CC00');
-    drawSnake(aiSnake, '#FFFF00', '#CCCC00');
-    
-    // Start the game loop
-    main();
-    
-    // Generate a power-up immediately
-    generatePowerUp();
-    
-    // Set up a regular interval for power-up generation
-    powerUpSpawnInterval = setInterval(() => {
-        // Only generate a new power-up if there isn't one already
-        if (!powerUp && gameRunning) {
-            generatePowerUp();
-        }
-    }, 3000); // Try to generate a power-up every 3 seconds
+    // Reset power-up state
+    powerUp = null;
+    powerUpActive = false;
+    activePowerUpType = null;
+    powerUpTimeLeft = 0;
+    isSpeedBoosted = false;
     
     // Reset gorilla
     gorilla = null;
@@ -156,8 +111,26 @@ function initGame() {
         gorillaTimeout = null;
     }
     
+    // Reset screen flash
+    screenFlashOpacity = 0;
+    
+    // Generate initial food and power-up
+    generateFood();
+    generatePowerUp();
+    
+    // Force a gorilla to appear soon after game start (5-10 seconds)
+    setTimeout(generateGorilla, 5000 + Math.random() * 5000);
+    
     // Schedule random gorilla appearances
     scheduleGorillaAppearance();
+    
+    // Start the game
+    gameRunning = true;
+    winner = null;
+    gameOverElement.style.display = 'none';
+    
+    // Start main game loop
+    main();
 }
 
 // Main game loop
@@ -599,19 +572,23 @@ function activatePowerUp(type, collector) {
                     }
                     
                     // Add bonus points
-                    playerScore += 10;
+                    playerScore += 15;
                     updateScores();
                     
                     // Show indicator for player
-                    powerUpIndicatorElement.textContent = `🍌 Banana Power! Grew 3 segments!`;
+                    powerUpIndicatorElement.textContent = `🍌 Banana Power! +3 segments, +15 points!`;
                     powerUpIndicatorElement.style.display = 'block';
                     
-                    // Create screen flash effect
+                    // Create screen flash effect (yellow for banana)
+                    ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
                     screenFlashOpacity = 0.6;
                     
                     // Hide indicator after 2 seconds
                     setTimeout(() => {
-                        powerUpIndicatorElement.style.display = 'none';
+                        if (powerUpIndicatorElement.textContent.includes('Banana Power')) {
+                            powerUpIndicatorElement.style.display = 'none';
+                        }
                     }, 2000);
                 } else {
                     // Banana power for AI: grow by 3 segments
@@ -624,7 +601,7 @@ function activatePowerUp(type, collector) {
                     }
                     
                     // Add bonus points for AI
-                    aiScore += 10;
+                    aiScore += 15;
                     updateScores();
                 }
                 break;
@@ -1104,7 +1081,7 @@ function drawPowerUp() {
     
     // Draw a symbol based on power-up type
     ctx.fillStyle = 'white';
-    ctx.font = '14px Arial';
+    ctx.font = '16px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
@@ -1269,6 +1246,17 @@ function generateGorilla() {
     gorilla = newGorilla;
     gorillaActive = true;
     
+    // Show message that gorilla appeared
+    powerUpIndicatorElement.textContent = `🦍 Gorilla appeared! Catch it for a banana!`;
+    powerUpIndicatorElement.style.display = 'block';
+    
+    // Hide indicator after 3 seconds
+    setTimeout(() => {
+        if (powerUpIndicatorElement.textContent.includes('Gorilla appeared')) {
+            powerUpIndicatorElement.style.display = 'none';
+        }
+    }, 3000);
+    
     // Gorilla will leave after 10 seconds
     gorillaTimeout = setTimeout(() => {
         console.log("Gorilla leaving");
@@ -1312,23 +1300,16 @@ function drawGorilla() {
         if (gorilla.x >= canvas.width - gridSize) gorilla.x = canvas.width - gridSize;
     }
     
-    // Draw gorilla body
-    ctx.fillStyle = '#8B4513'; // Brown color for gorilla
+    // Draw gorilla background
+    ctx.fillStyle = '#A0522D'; // Darker brown background
     ctx.fillRect(gorilla.x, gorilla.y, gridSize, gridSize);
     
-    // Draw gorilla details
-    ctx.fillStyle = '#000000';
-    
-    // Eyes and mouth based on direction
-    if (gorilla.direction > 0) {
-        // Right-facing
-        ctx.fillRect(gorilla.x + gridSize * 0.7, gorilla.y + gridSize * 0.3, gridSize * 0.15, gridSize * 0.15);
-        ctx.fillRect(gorilla.x + gridSize * 0.5, gorilla.y + gridSize * 0.6, gridSize * 0.4, gridSize * 0.1);
-    } else {
-        // Left-facing
-        ctx.fillRect(gorilla.x + gridSize * 0.15, gorilla.y + gridSize * 0.3, gridSize * 0.15, gridSize * 0.15);
-        ctx.fillRect(gorilla.x + gridSize * 0.1, gorilla.y + gridSize * 0.6, gridSize * 0.4, gridSize * 0.1);
-    }
+    // Draw gorilla emoji
+    ctx.fillStyle = 'white';
+    ctx.font = '18px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🦍', gorilla.x + gridSize/2, gorilla.y + gridSize/2);
     
     // Check collision with snakes
     checkGorillaCollision();
@@ -1361,6 +1342,17 @@ function checkGorillaCollision() {
             
             // Create screen flash effect
             screenFlashOpacity = 0.5;
+            
+            // Show message
+            powerUpIndicatorElement.textContent = `You caught the gorilla! 🦍 Banana dropped! 🍌`;
+            powerUpIndicatorElement.style.display = 'block';
+            
+            // Hide indicator after 2 seconds
+            setTimeout(() => {
+                if (powerUpIndicatorElement.textContent.includes('caught the gorilla')) {
+                    powerUpIndicatorElement.style.display = 'none';
+                }
+            }, 2000);
         }
     }
     
@@ -1384,6 +1376,17 @@ function checkGorillaCollision() {
                 clearTimeout(gorillaTimeout);
                 gorillaTimeout = null;
             }
+            
+            // Show message
+            powerUpIndicatorElement.textContent = `AI caught the gorilla! Banana dropped!`;
+            powerUpIndicatorElement.style.display = 'block';
+            
+            // Hide indicator after 2 seconds
+            setTimeout(() => {
+                if (powerUpIndicatorElement.textContent.includes('AI caught')) {
+                    powerUpIndicatorElement.style.display = 'none';
+                }
+            }, 2000);
         }
     }
 }

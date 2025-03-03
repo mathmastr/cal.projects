@@ -15,6 +15,9 @@ let highScore = 0;
 let speed = 5;
 let gameRunning = true;
 let winner = null;
+let gorilla = null; // Add gorilla variable
+let gorillaActive = false;
+let gorillaTimeout = null;
 
 // Player-specific variables for speed control
 let playerMoveCounter = 0;
@@ -60,7 +63,9 @@ const powerUpTypes = [
     { type: 'speed', color: '#8A2BE2', effect: 'Speed Boost' },
     { type: 'freeze', color: '#00BFFF', effect: 'Snake Freeze' },
     { type: 'magnet', color: '#FF69B4', effect: 'Food Magnet' },
-    { type: 'shrink', color: '#32CD32', effect: 'Shrink' }
+    { type: 'shrink', color: '#32CD32', effect: 'Shrink' },
+    { type: 'blackout', color: '#000000', effect: 'Black Out' },
+    { type: 'banana', color: '#FFD700', effect: 'Banana Power' }
 ];
 
 // Initialize game
@@ -71,7 +76,7 @@ function initGame() {
     ];
     
     aiSnake = [
-        { x: Math.floor(3 * tileCount / 4) * gridSize, y: Math.floor(tileCount / 2) * gridSize }
+        { x: Math.floor(tileCount * 3 / 4) * gridSize, y: Math.floor(tileCount / 2) * gridSize }
     ];
     
     // Set initial directions - giving them starting directions so they move immediately
@@ -142,6 +147,17 @@ function initGame() {
             generatePowerUp();
         }
     }, 3000); // Try to generate a power-up every 3 seconds
+    
+    // Reset gorilla
+    gorilla = null;
+    gorillaActive = false;
+    if (gorillaTimeout) {
+        clearTimeout(gorillaTimeout);
+        gorillaTimeout = null;
+    }
+    
+    // Schedule random gorilla appearances
+    scheduleGorillaAppearance();
 }
 
 // Main game loop
@@ -197,6 +213,7 @@ function main() {
         if (gameRunning) {
             drawFood();
             if (powerUp) drawPowerUp();
+            if (gorilla && gorillaActive) drawGorilla();
             drawSnake(playerSnake, '#00FF00', '#00CC00');  // Green for player
             drawSnake(aiSnake, '#FFFF00', '#CCCC00');      // Yellow for AI
             
@@ -215,6 +232,11 @@ function main() {
             // Draw magnet effect if active
             if (powerUpActive && activePowerUpType === 'magnet') {
                 drawMagnetEffect();
+            }
+            
+            // Draw blackout effect if active
+            if (powerUpActive && activePowerUpType === 'blackout') {
+                drawBlackoutEffect();
             }
             
             // Call main again
@@ -253,6 +275,12 @@ function updatePowerUps() {
                 break;
             case 'shrink':
                 powerUpName = '📏 Shrink';
+                break;
+            case 'blackout':
+                powerUpName = '🌑 Black Out';
+                break;
+            case 'banana':
+                powerUpName = '🍌 Banana Power';
                 break;
             default:
                 powerUpName = 'Unknown';
@@ -532,6 +560,72 @@ function activatePowerUp(type, collector) {
                             powerUpIndicatorElement.style.display = 'none';
                         }, 2000);
                     }
+                }
+                break;
+                
+            case 'blackout':
+                if (collector === 'player') {
+                    // Player blacks out AI's view (mostly for effect since AI uses code logic)
+                    console.log("Player activated blackout against AI");
+                    screenFlashOpacity = 0.7;
+                } else {
+                    // AI uses blackout against player - create a dramatic effect
+                    console.log("AI activated blackout against player");
+                    powerUpActive = true;
+                    activePowerUpType = 'blackout';
+                    powerUpTimeLeft = POWER_UP_DURATION;
+                    
+                    // Flash effect for dramatic impact
+                    screenFlashOpacity = 1.0;
+                    
+                    // Show indicator for player
+                    powerUpIndicatorElement.textContent = `⚫ BLACKOUT! (5s)`;
+                    powerUpIndicatorElement.style.display = 'block';
+                    
+                    // Play a sound if audio is implemented
+                    // playSound('blackout');
+                }
+                break;
+                
+            case 'banana':
+                if (collector === 'player') {
+                    // Banana power for player: grow by 3 segments and gain extra points
+                    console.log("Player got banana: growing and bonus points!");
+                    
+                    // Add three segments to the snake
+                    const tail = playerSnake[playerSnake.length - 1];
+                    for (let i = 0; i < 3; i++) {
+                        playerSnake.push({...tail});
+                    }
+                    
+                    // Add bonus points
+                    playerScore += 10;
+                    updateScores();
+                    
+                    // Show indicator for player
+                    powerUpIndicatorElement.textContent = `🍌 Banana Power! Grew 3 segments!`;
+                    powerUpIndicatorElement.style.display = 'block';
+                    
+                    // Create screen flash effect
+                    screenFlashOpacity = 0.6;
+                    
+                    // Hide indicator after 2 seconds
+                    setTimeout(() => {
+                        powerUpIndicatorElement.style.display = 'none';
+                    }, 2000);
+                } else {
+                    // Banana power for AI: grow by 3 segments
+                    console.log("AI got banana: growing and bonus points!");
+                    
+                    // Add three segments to the AI snake
+                    const aiTail = aiSnake[aiSnake.length - 1];
+                    for (let i = 0; i < 3; i++) {
+                        aiSnake.push({...aiTail});
+                    }
+                    
+                    // Add bonus points for AI
+                    aiScore += 10;
+                    updateScores();
                 }
                 break;
                 
@@ -1003,8 +1097,10 @@ function drawPowerUp() {
     ctx.fill();
     
     // Draw the power-up with current opacity
-    ctx.fillStyle = `rgba(138, 43, 226, ${powerUpOpacity})`;
+    ctx.fillStyle = powerUp.type.color;
+    ctx.globalAlpha = powerUpOpacity;
     ctx.fillRect(powerUp.x, powerUp.y, gridSize, gridSize);
+    ctx.globalAlpha = 1.0;
     
     // Draw a symbol based on power-up type
     ctx.fillStyle = 'white';
@@ -1026,6 +1122,12 @@ function drawPowerUp() {
         case 'shrink':
             symbol = '📏';
             break;
+        case 'blackout':
+            symbol = '⚫';
+            break;
+        case 'banana':
+            symbol = '🍌';
+            break;
     }
     
     ctx.fillText(symbol, powerUp.x + gridSize/2, powerUp.y + gridSize/2);
@@ -1040,6 +1142,250 @@ function drawFrozenEffect(snake) {
         ctx.fillStyle = 'rgba(0, 191, 255, 0.5)';
         ctx.fillRect(segment.x, segment.y, gridSize, gridSize);
     });
+}
+
+// Draw blackout effect
+function drawBlackoutEffect() {
+    // Create a dramatic pulsing blackout effect
+    const time = new Date().getTime();
+    const pulseIntensity = 0.1 + 0.05 * Math.sin(time / 100);  // Subtle pulsing
+    
+    // Create a dark gradient that leaves small visibility around the player
+    const gradient = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, 10,
+        canvas.width / 2, canvas.height / 2, canvas.width / 2
+    );
+    
+    // Almost completely black at the edges
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0.5)');
+    gradient.addColorStop(1, `rgba(0, 0, 0, ${0.9 + pulseIntensity})`);
+    
+    // Fill the entire canvas with the gradient
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Add some visual effects - random stars that appear and disappear
+    for (let i = 0; i < 20; i++) {
+        if (Math.random() > 0.7) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const radius = Math.random() * 1.5;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.7})`;
+            ctx.fill();
+        }
+    }
+    
+    // Draw visibility circle around player's snake head for minimal visibility
+    if (playerSnake.length > 0) {
+        const head = playerSnake[0];
+        const visibilityRadius = gridSize * 3;
+        
+        // Create a spotlight effect
+        const spotlight = ctx.createRadialGradient(
+            head.x + gridSize/2, head.y + gridSize/2, 1,
+            head.x + gridSize/2, head.y + gridSize/2, visibilityRadius
+        );
+        
+        spotlight.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        spotlight.addColorStop(0.7, 'rgba(0, 0, 0, 0.1)');
+        spotlight.addColorStop(1, 'rgba(0, 0, 0, 0.95)');
+        
+        // Create a cutout in the darkness
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(head.x + gridSize/2, head.y + gridSize/2, visibilityRadius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
+        
+        // Add a subtle glow around the player's head
+        ctx.beginPath();
+        ctx.arc(head.x + gridSize/2, head.y + gridSize/2, gridSize * 1.5, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+}
+
+// Generate random position for gorilla
+function generateGorilla() {
+    if (!gameRunning || gorillaActive) return;
+    
+    console.log("Generating gorilla!");
+    
+    // Generate random position for gorilla
+    let newGorilla;
+    let gorillaOnSnake;
+    let attempts = 0;
+    
+    do {
+        gorillaOnSnake = false;
+        newGorilla = {
+            x: Math.floor(Math.random() * tileCount) * gridSize,
+            y: Math.floor(Math.random() * tileCount) * gridSize,
+            frameCount: 0, // For animation
+            direction: Math.random() > 0.5 ? 1 : -1 // Direction for movement
+        };
+        
+        // Check if gorilla is on player snake
+        for (let segment of playerSnake) {
+            if (segment.x === newGorilla.x && segment.y === newGorilla.y) {
+                gorillaOnSnake = true;
+                break;
+            }
+        }
+        
+        // Check if gorilla is on AI snake
+        if (!gorillaOnSnake) {
+            for (let segment of aiSnake) {
+                if (segment.x === newGorilla.x && segment.y === newGorilla.y) {
+                    gorillaOnSnake = true;
+                    break;
+                }
+            }
+        }
+        
+        // Check if gorilla is on food
+        if (food && food.x === newGorilla.x && food.y === newGorilla.y) {
+            gorillaOnSnake = true;
+        }
+        
+        // Check if gorilla is on power-up
+        if (powerUp && powerUp.x === newGorilla.x && powerUp.y === newGorilla.y) {
+            gorillaOnSnake = true;
+        }
+        
+        attempts++;
+        // If we've tried many times and can't find a spot, give up for now
+        if (attempts > 50) {
+            console.log("Couldn't place gorilla after 50 attempts");
+            return;
+        }
+    } while (gorillaOnSnake);
+    
+    gorilla = newGorilla;
+    gorillaActive = true;
+    
+    // Gorilla will leave after 10 seconds
+    gorillaTimeout = setTimeout(() => {
+        console.log("Gorilla leaving");
+        gorilla = null;
+        gorillaActive = false;
+    }, 10000);
+}
+
+// Schedule random appearances of the gorilla
+function scheduleGorillaAppearance() {
+    // Random time between 15-45 seconds
+    const appearanceTime = 15000 + Math.random() * 30000;
+    
+    setTimeout(() => {
+        generateGorilla();
+        if (gameRunning) {
+            scheduleGorillaAppearance(); // Schedule next appearance
+        }
+    }, appearanceTime);
+}
+
+// Draw gorilla
+function drawGorilla() {
+    if (!gorilla || !gorillaActive) return;
+    
+    // Update frame count for animation
+    gorilla.frameCount++;
+    
+    // Move gorilla randomly every 30 frames
+    if (gorilla.frameCount % 30 === 0) {
+        // 30% chance to change direction
+        if (Math.random() < 0.3) {
+            gorilla.direction = -gorilla.direction;
+        }
+        
+        // Move left or right
+        gorilla.x += gorilla.direction * gridSize;
+        
+        // Keep gorilla within bounds
+        if (gorilla.x < 0) gorilla.x = 0;
+        if (gorilla.x >= canvas.width - gridSize) gorilla.x = canvas.width - gridSize;
+    }
+    
+    // Draw gorilla body
+    ctx.fillStyle = '#8B4513'; // Brown color for gorilla
+    ctx.fillRect(gorilla.x, gorilla.y, gridSize, gridSize);
+    
+    // Draw gorilla details
+    ctx.fillStyle = '#000000';
+    
+    // Eyes and mouth based on direction
+    if (gorilla.direction > 0) {
+        // Right-facing
+        ctx.fillRect(gorilla.x + gridSize * 0.7, gorilla.y + gridSize * 0.3, gridSize * 0.15, gridSize * 0.15);
+        ctx.fillRect(gorilla.x + gridSize * 0.5, gorilla.y + gridSize * 0.6, gridSize * 0.4, gridSize * 0.1);
+    } else {
+        // Left-facing
+        ctx.fillRect(gorilla.x + gridSize * 0.15, gorilla.y + gridSize * 0.3, gridSize * 0.15, gridSize * 0.15);
+        ctx.fillRect(gorilla.x + gridSize * 0.1, gorilla.y + gridSize * 0.6, gridSize * 0.4, gridSize * 0.1);
+    }
+    
+    // Check collision with snakes
+    checkGorillaCollision();
+}
+
+// Check if snake collides with gorilla
+function checkGorillaCollision() {
+    if (!gorilla || !gorillaActive) return;
+    
+    // Check player collision
+    if (playerSnake.length > 0) {
+        const playerHead = playerSnake[0];
+        if (playerHead.x === gorilla.x && playerHead.y === gorilla.y) {
+            console.log("Player collided with gorilla!");
+            
+            // Drop a banana power-up when gorilla is hit
+            powerUp = {
+                x: gorilla.x,
+                y: gorilla.y,
+                type: powerUpTypes.find(p => p.type === 'banana')
+            };
+            
+            // Remove gorilla
+            gorilla = null;
+            gorillaActive = false;
+            if (gorillaTimeout) {
+                clearTimeout(gorillaTimeout);
+                gorillaTimeout = null;
+            }
+            
+            // Create screen flash effect
+            screenFlashOpacity = 0.5;
+        }
+    }
+    
+    // Check AI collision
+    if (aiSnake.length > 0) {
+        const aiHead = aiSnake[0];
+        if (aiHead.x === gorilla.x && aiHead.y === gorilla.y) {
+            console.log("AI collided with gorilla!");
+            
+            // Drop a banana power-up when gorilla is hit
+            powerUp = {
+                x: gorilla.x,
+                y: gorilla.y,
+                type: powerUpTypes.find(p => p.type === 'banana')
+            };
+            
+            // Remove gorilla
+            gorilla = null;
+            gorillaActive = false;
+            if (gorillaTimeout) {
+                clearTimeout(gorillaTimeout);
+                gorillaTimeout = null;
+            }
+        }
+    }
 }
 
 // Event listeners
